@@ -481,9 +481,9 @@ Ver [DEPLOYMENT.md](DEPLOYMENT.md) para:
 5. **Commit**: `git commit -m 'Add nueva categoría de suplementos deportivos'`
 6. **Pull Request**: Incluir descripción de cambios de infraestructura
 
-## 📄 Licencia
+## 📄 Autor
 
-MIT License - Ver [LICENSE](LICENSE) para detalles completos.
+Juan BESSINI
 
 ---
 
