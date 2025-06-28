@@ -1,0 +1,84 @@
+# ================================================
+# DP-3 E-COMMERCE TERRAFORM VARIABLES EXAMPLE
+# ================================================
+# 
+# Copia este archivo a terraform.tfvars y completa con tus valores
+# cp terraform.tfvars.example terraform.tfvars
+
+# *** VARIABLES REQUERIDAS ***
+
+# Variables generales del proyecto
+project_name = "data-project-3"
+
+# Variables de GCP
+gcp_project_id = "tu-proyecto-gcp-id"
+gcp_region     = "europe-west1"
+
+# Variables de AWS
+aws_region = "eu-central-1"
+
+# Variables de base de datos
+db_username = "ecommerceuser"
+db_password = "TuPasswordSegura123!"
+datastream_password = "TuPasswordDatastream123!"
+
+# Variables de la aplicación
+flask_app_image = "europe-west1-docker.pkg.dev/tu-proyecto-gcp-id/data-project-3-repo/data-project-3-flask-app:latest"
+
+# *** VARIABLES OPCIONALES (con defaults) ***
+
+# Variables de GCP adicionales
+# gcp_zone = "europe-west1-b"
+
+# Variables de AWS adicionales  
+# aws_availability_zones = ["eu-central-1a", "eu-central-1b"]
+
+# Variables de base de datos adicionales
+# db_name = "ecommerce"
+# datastream_username = "datastream_user"
+# db_instance_class = "db.t3.micro"
+
+# Variables de red
+# vpc_cidr = "10.0.0.0/16"
+# private_subnets_cidr = ["10.0.1.0/24", "10.0.2.0/24"]
+# public_subnets_cidr = ["10.0.101.0/24", "10.0.102.0/24"]
+
+# Variables de la aplicación adicionales
+# flask_app_port = 8080
+# lambda_runtime = "python3.11"
+
+# Variables para BigQuery y Datastream
+# bigquery_dataset_id = "ecommerce_analytics"
+# bigquery_dataset_location = "EU"
+# datastream_display_name = "ecommerce-rds-to-bq"
+
+# Variables adicionales
+# environment = "production"
+# db_allocated_storage = 20
+# lambda_timeout = 30
+# lambda_memory_size = 128
+
+# ===========================================
+# INSTRUCCIONES DE USO:
+# ===========================================
+# 1. Copia este archivo:
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. Edita terraform.tfvars con tus valores reales:
+#    - Reemplaza "your-gcp-project-id" con tu ID de proyecto real
+#    - Cambia la contraseña por una segura
+#    - Ajusta las regiones según tu ubicación preferida
+#
+# 3. NUNCA subas terraform.tfvars a Git (incluído en .gitignore)
+#
+# 4. Asegúrate de tener configurados:
+#    - AWS CLI: aws configure
+#    - GCP CLI: gcloud auth application-default login
+#
+# ===========================================
+# REGIONES RECOMENDADAS:
+# ===========================================
+# AWS: us-east-1, us-west-2, eu-west-1, ap-southeast-1
+# GCP: us-central1, us-east1, europe-west1, asia-southeast1
+#
+# Nota: Usa regiones cercanas geográficamente para mejor latencia
