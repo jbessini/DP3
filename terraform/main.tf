@@ -460,6 +460,7 @@ resource "aws_lambda_function" "add_product" {
 }
 
 # --- AWS: API Gateway ---
+# TODO: MEJORA - Agregar WAF, throttling, y API keys para seguridad
 resource "aws_api_gateway_rest_api" "api" {
   name        = "${var.project_name}-ecommerce-api"
   description = "API Gateway para el e-commerce DP-3"
@@ -468,6 +469,12 @@ resource "aws_api_gateway_rest_api" "api" {
     types = ["REGIONAL"]
   }
 
+  # TODO: AGREGAR - Configuración de throttling
+  # throttle_settings {
+  #   rate_limit  = 1000
+  #   burst_limit = 2000
+  # }
+
   tags = {
     Name    = "${var.project_name}-ecommerce-api"
     Project = var.project_name
@@ -475,17 +482,20 @@ resource "aws_api_gateway_rest_api" "api" {
 }
 
 # Recurso /products
+# TODO: MEJORA - Implementar validación de requests y response models
 resource "aws_api_gateway_resource" "products" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
   path_part   = "products"
 }
 
+# TODO: SEGURIDAD - Sin autenticación ni autorización
 resource "aws_api_gateway_method" "products_get" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.products.id
   http_method   = "GET"
-  authorization = "NONE"
+  authorization = "NONE" # TODO: CAMBIAR POR AWS_IAM, COGNITO, o API_KEY
+  # TODO: AGREGAR - request_validator_id para validación de requests
 }
 
 resource "aws_api_gateway_integration" "products_get_lambda" {
@@ -495,20 +505,24 @@ resource "aws_api_gateway_integration" "products_get_lambda" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.get_products.invoke_arn
+  # TODO: AGREGAR - timeout_milliseconds para control de timeouts
 }
 
 # Recurso /add
+# TODO: MISMO PROBLEMA - Sin autenticación para operaciones críticas
 resource "aws_api_gateway_resource" "add" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
   path_part   = "add"
 }
 
+# TODO: CRÍTICO - POST sin autenticación permite a cualquiera agregar productos
 resource "aws_api_gateway_method" "add_post" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.add.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "NONE" # ❌ CRÍTICO - Operación POST sin autenticación
+  # TODO: URGENTE - Implementar autenticación para operaciones de escritura
 }
 
 resource "aws_api_gateway_integration" "add_post_lambda" {
@@ -541,6 +555,7 @@ resource "aws_api_gateway_method" "item_post" {
   authorization = "NONE"
 }
 
+# TODO: PROBLEMA LÓGICO - Ambos métodos GET y POST usan la misma Lambda (get_item)
 resource "aws_api_gateway_integration" "item_get_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.item.id
@@ -550,13 +565,14 @@ resource "aws_api_gateway_integration" "item_get_lambda" {
   uri                     = aws_lambda_function.get_item.invoke_arn
 }
 
+# ❌ PROBLEMA - POST debería usar add_product Lambda, no get_item
 resource "aws_api_gateway_integration" "item_post_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.item.id
   http_method             = aws_api_gateway_method.item_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.get_item.invoke_arn
+  uri                     = aws_lambda_function.get_item.invoke_arn # TODO: CAMBIAR POR add_product o crear update_item
 }
 
 # Habilitación CORS para todos los recursos
