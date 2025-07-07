@@ -1,4 +1,16 @@
+# TODO: MEJORA CRÍTICA - Configurar backend remoto para Terraform state
+# terraform {
+#   backend "s3" {
+#     bucket         = "dp3-terraform-state-bucket"
+#     key            = "environments/${var.environment}/terraform.tfstate"
+#     region         = var.aws_region
+#     encrypt        = true
+#     dynamodb_table = "dp3-terraform-state-lock"
+#   }
+# }
+
 # --- Habilitar APIs de GCP ---
+# TODO: MEJORA - Agregar timeouts y disable_on_destroy para control más granular
 resource "google_project_service" "apis" {
   for_each = toset([
     "run.googleapis.com",
@@ -11,6 +23,7 @@ resource "google_project_service" "apis" {
   project                    = var.gcp_project_id
   service                    = each.key
   disable_dependent_services = false
+  # TODO: MEJORA - Agregar disable_on_destroy = false para evitar problemas al destruir
 }
 
 # --- GCP: Artifact Registry para la imagen Docker de la App ---
@@ -162,6 +175,8 @@ resource "aws_route_table_association" "private_2" {
 
 # --- AWS: Security Groups ---
 
+# TODO: PROBLEMA CRÍTICO DE SEGURIDAD - RDS público con acceso 0.0.0.0/0
+# MEJORA URGENTE: Cambiar a subnets privadas y restringir acceso solo desde Lambda
 # Security Group para RDS (público pero controlado)
 resource "aws_security_group" "rds_sg" {
   name_prefix = "${var.project_name}-rds-sg"
@@ -172,7 +187,8 @@ resource "aws_security_group" "rds_sg" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Público como solicitaste
+    cidr_blocks = ["0.0.0.0/0"] # ❌ MUY PELIGROSO - Público como solicitaste
+    # TODO: CAMBIAR POR: security_groups = [aws_security_group.lambda_sg.id]
   }
 
   egress {
@@ -189,9 +205,18 @@ resource "aws_security_group" "rds_sg" {
 }
 
 # Security Group para Lambda (privado)
+# TODO: MEJORA - Agregar regla de ingress específica para comunicación con RDS
 resource "aws_security_group" "lambda_sg" {
   name_prefix = "${var.project_name}-lambda-sg"
   vpc_id      = aws_vpc.main.id
+
+  # TODO: AGREGAR - Regla de ingress para permitir comunicación entre Lambdas si es necesario
+  # ingress {
+  #   from_port = 0
+  #   to_port   = 65535
+  #   protocol  = "tcp"
+  #   self      = true
+  # }
 
   egress {
     from_port   = 0
@@ -207,9 +232,11 @@ resource "aws_security_group" "lambda_sg" {
 }
 
 # --- AWS: DB Subnet Group ---
+# TODO: PROBLEMA DE SEGURIDAD - RDS debería estar en subnets privadas
 resource "aws_db_subnet_group" "main_db_subnet_group" {
   name       = "${var.project_name}-dbsub-group-789"
-  subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id] # RDS en subnets públicas
+  subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id] # ❌ RDS en subnets públicas
+  # TODO: CAMBIAR POR: subnet_ids = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 
   tags = {
     Name    = "${var.project_name}-dbsub-group-789"
@@ -218,24 +245,35 @@ resource "aws_db_subnet_group" "main_db_subnet_group" {
 }
 
 # --- AWS: Base de Datos PostgreSQL en RDS (Público en VPC) ---
+# TODO: MÚLTIPLES PROBLEMAS DE SEGURIDAD Y MEJORES PRÁCTICAS
 resource "aws_db_instance" "main_database" {
   identifier             = "${var.project_name}-newdb-456"
   allocated_storage      = var.db_allocated_storage
   max_allocated_storage  = 100
-  storage_type           = "gp2"
+  storage_type           = "gp2" # TODO: MEJORA - Considerar gp3 para mejor performance/precio
   engine                 = "postgres"
   engine_version         = "15.7"
   instance_class         = var.db_instance_class
   db_name                = var.db_name
   username               = var.db_username
-  password               = var.db_password
-  publicly_accessible    = true  # Público como solicitaste
+  password               = var.db_password # TODO: SEGURIDAD - Usar AWS Secrets Manager
+  publicly_accessible    = true  # ❌ CRÍTICO - Público como solicitaste
+  # TODO: CAMBIAR A: publicly_accessible = false
   db_subnet_group_name   = aws_db_subnet_group.main_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
-  skip_final_snapshot    = true
+  skip_final_snapshot    = true # TODO: PRODUCCIÓN - Cambiar a false
   backup_retention_period = 7
   backup_window          = "03:00-04:00"
   maintenance_window     = "sun:04:00-sun:05:00"
+  
+  # TODO: AGREGAR MEJORAS DE SEGURIDAD:
+  # storage_encrypted               = true
+  # kms_key_id                     = aws_kms_key.rds_key.arn
+  # enabled_cloudwatch_logs_exports = ["postgresql"]
+  # monitoring_interval            = 60
+  # monitoring_role_arn           = aws_iam_role.rds_monitoring.arn
+  # performance_insights_enabled   = true
+  # deletion_protection           = var.environment == "production" ? true : false
 
   tags = {
     Name    = "${var.project_name}-public-db"
@@ -244,6 +282,7 @@ resource "aws_db_instance" "main_database" {
 }
 
 # --- AWS: IAM Rol y Política para las Lambdas ---
+# TODO: MEJORA - Aplicar principio de menor privilegio con políticas más específicas
 resource "aws_iam_role" "lambda_exec_role" {
   name = "${var.project_name}-lambda-execution-role"
 
@@ -266,6 +305,7 @@ resource "aws_iam_role" "lambda_exec_role" {
   }
 }
 
+# TODO: MEJORA - Crear políticas IAM específicas para cada Lambda en lugar de usar managed policies genéricas
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.lambda_exec_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -276,9 +316,28 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+# TODO: AGREGAR - Política específica para acceso a Secrets Manager
+# resource "aws_iam_role_policy" "lambda_secrets_policy" {
+#   name = "${var.project_name}-lambda-secrets-policy"
+#   role = aws_iam_role.lambda_exec_role.id
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "secretsmanager:GetSecretValue"
+#         ]
+#         Resource = aws_secretsmanager_secret.db_credentials.arn
+#       }
+#     ]
+#   })
+# }
+
 # --- AWS: Empaquetado y creación de las Funciones Lambda ---
 
 # Lambda: GetProducts
+# TODO: MEJORA - Considerar usar imágenes de contenedor para dependencias complejas
 data "archive_file" "get_products" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_src/get_products"
@@ -300,14 +359,21 @@ resource "aws_lambda_function" "get_products" {
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
+  # TODO: SEGURIDAD CRÍTICA - Credenciales expuestas como variables de entorno
   environment {
     variables = {
       DB_HOST     = aws_db_instance.main_database.address
       DB_USER     = var.db_username
-      DB_PASSWORD = var.db_password
+      DB_PASSWORD = var.db_password # ❌ NUNCA exponer password en variables de entorno
       DB_NAME     = aws_db_instance.main_database.db_name
+      # TODO: CAMBIAR POR: SECRET_ARN = aws_secretsmanager_secret.db_credentials.arn
     }
   }
+
+  # TODO: AGREGAR - CloudWatch logs y dead letter queue
+  # dead_letter_config {
+  #   target_arn = aws_sqs_queue.lambda_dlq.arn
+  # }
 
   tags = {
     Name    = "${var.project_name}-getProducts"
@@ -316,6 +382,7 @@ resource "aws_lambda_function" "get_products" {
 }
 
 # Lambda: GetItem
+# TODO: MEJORA - Mismos problemas que GetProducts (seguridad, monitoreo, etc.)
 data "archive_file" "get_item" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_src/get_item"
@@ -337,11 +404,12 @@ resource "aws_lambda_function" "get_item" {
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
+  # TODO: MISMO PROBLEMA - Credenciales expuestas
   environment {
     variables = {
       DB_HOST     = aws_db_instance.main_database.address
       DB_USER     = var.db_username
-      DB_PASSWORD = var.db_password
+      DB_PASSWORD = var.db_password # ❌ MISMO PROBLEMA DE SEGURIDAD
       DB_NAME     = aws_db_instance.main_database.db_name
     }
   }
@@ -353,8 +421,9 @@ resource "aws_lambda_function" "get_item" {
 }
 
 # Lambda: AddProduct
+# TODO: OBSERVACIÓN - Comentario del alumno sobre usar Docker es correcto
 data "archive_file" "add_product" {
-  type        = "zip"
+  type        = "zip" # ✅ Aquí debería ser una docker image no un zip para manejar mejor dependencias
   source_dir  = "${path.module}/lambda_src/add_product"
   output_path = "${path.module}/add_product.zip"
 }
@@ -374,11 +443,12 @@ resource "aws_lambda_function" "add_product" {
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
+  # TODO: MISMO PROBLEMA - Credenciales expuestas
   environment {
     variables = {
       DB_HOST     = aws_db_instance.main_database.address
       DB_USER     = var.db_username
-      DB_PASSWORD = var.db_password
+      DB_PASSWORD = var.db_password # ❌ MISMO PROBLEMA DE SEGURIDAD
       DB_NAME     = aws_db_instance.main_database.db_name
     }
   }
@@ -390,6 +460,7 @@ resource "aws_lambda_function" "add_product" {
 }
 
 # --- AWS: API Gateway ---
+# TODO: MEJORA - Agregar WAF, throttling, y API keys para seguridad
 resource "aws_api_gateway_rest_api" "api" {
   name        = "${var.project_name}-ecommerce-api"
   description = "API Gateway para el e-commerce DP-3"
@@ -398,6 +469,12 @@ resource "aws_api_gateway_rest_api" "api" {
     types = ["REGIONAL"]
   }
 
+  # TODO: AGREGAR - Configuración de throttling
+  # throttle_settings {
+  #   rate_limit  = 1000
+  #   burst_limit = 2000
+  # }
+
   tags = {
     Name    = "${var.project_name}-ecommerce-api"
     Project = var.project_name
@@ -405,17 +482,20 @@ resource "aws_api_gateway_rest_api" "api" {
 }
 
 # Recurso /products
+# TODO: MEJORA - Implementar validación de requests y response models
 resource "aws_api_gateway_resource" "products" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
   path_part   = "products"
 }
 
+# TODO: SEGURIDAD - Sin autenticación ni autorización
 resource "aws_api_gateway_method" "products_get" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.products.id
   http_method   = "GET"
-  authorization = "NONE"
+  authorization = "NONE" # TODO: CAMBIAR POR AWS_IAM, COGNITO, o API_KEY
+  # TODO: AGREGAR - request_validator_id para validación de requests
 }
 
 resource "aws_api_gateway_integration" "products_get_lambda" {
@@ -425,20 +505,24 @@ resource "aws_api_gateway_integration" "products_get_lambda" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.get_products.invoke_arn
+  # TODO: AGREGAR - timeout_milliseconds para control de timeouts
 }
 
 # Recurso /add
+# TODO: MISMO PROBLEMA - Sin autenticación para operaciones críticas
 resource "aws_api_gateway_resource" "add" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
   path_part   = "add"
 }
 
+# TODO: CRÍTICO - POST sin autenticación permite a cualquiera agregar productos
 resource "aws_api_gateway_method" "add_post" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.add.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "NONE" # ❌ CRÍTICO - Operación POST sin autenticación
+  # TODO: URGENTE - Implementar autenticación para operaciones de escritura
 }
 
 resource "aws_api_gateway_integration" "add_post_lambda" {
@@ -471,6 +555,7 @@ resource "aws_api_gateway_method" "item_post" {
   authorization = "NONE"
 }
 
+# TODO: PROBLEMA LÓGICO - Ambos métodos GET y POST usan la misma Lambda (get_item)
 resource "aws_api_gateway_integration" "item_get_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.item.id
@@ -480,13 +565,14 @@ resource "aws_api_gateway_integration" "item_get_lambda" {
   uri                     = aws_lambda_function.get_item.invoke_arn
 }
 
+# ❌ PROBLEMA - POST debería usar add_product Lambda, no get_item
 resource "aws_api_gateway_integration" "item_post_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.item.id
   http_method             = aws_api_gateway_method.item_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.get_item.invoke_arn
+  uri                     = aws_lambda_function.get_item.invoke_arn # TODO: CAMBIAR POR add_product o crear update_item
 }
 
 # Habilitación CORS para todos los recursos
